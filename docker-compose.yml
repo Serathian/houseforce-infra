@@ -1,0 +1,157 @@
+services:
+  traefik:
+    image: traefik:v2.11
+    container_name: traefik
+    restart: unless-stopped
+    command:
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--providers.docker.network=traefik-public"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+      - "--entrypoints.web.http.redirections.entrypoint.to=websecure"
+      - "--entrypoints.web.http.redirections.entrypoint.scheme=https"
+      - "--certificatesresolvers.le.acme.httpchallenge=true"
+      - "--certificatesresolvers.le.acme.httpchallenge.entrypoint=web"
+      - "--certificatesresolvers.le.acme.email=${ACME_EMAIL:-admin@houseforce.es}"
+      - "--certificatesresolvers.le.acme.storage=/acme.json"
+      - "--api.dashboard=true"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.traefik-dashboard.rule=Host(`traefik.${DOMAIN:-houseforce.es}`) || Host(`dns.${DOMAIN:-houseforce.es}`)"
+      - "traefik.http.routers.traefik-dashboard.entrypoints=websecure"
+      - "traefik.http.routers.traefik-dashboard.tls.certresolver=le"
+      - "traefik.http.routers.traefik-dashboard.service=api@internal"
+      - "traefik.http.routers.traefik-dashboard.middlewares=traefik-auth"
+      - "traefik.http.middlewares.traefik-auth.basicauth.users=${TRAEFIK_DASHBOARD_AUTH:-}"
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+      - "./traefik/acme.json:/acme.json"
+    networks:
+      - traefik-public
+
+  watchtower:
+    image: containrrr/watchtower
+    container_name: watchtower
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /home/deploy/.docker/config.json:/config.json:ro
+    environment:
+      - WATCHTOWER_HTTP_API_UPDATE=true
+      - WATCHTOWER_HTTP_API_TOKEN=${WATCHTOWER_TOKEN:-}
+      - WATCHTOWER_POLL_INTERVAL=0
+      - WATCHTOWER_CLEANUP=true
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.watchtower.rule=Host(`deploy.${DOMAIN:-houseforce.es}`)"
+      - "traefik.http.routers.watchtower.entrypoints=websecure"
+      - "traefik.http.routers.watchtower.tls.certresolver=le"
+      - "traefik.http.services.watchtower.loadbalancer.server.port=8080"
+    networks:
+      - traefik-public
+
+  houseforce-backend:
+    image: ${BACKEND_IMAGE:-ghcr.io/${GITHUB_OWNER:-Serathian}/houseforce-backend:latest}
+    container_name: houseforce-backend
+    restart: unless-stopped
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      NODE_ENV: production
+      NODE_OPTIONS: "--max-old-space-size=384"
+      HOST: 0.0.0.0
+      PORT: 1337
+      APP_KEYS: ${HOUSEFORCE_STRAPI_APP_KEYS:-}
+      API_TOKEN_SALT: ${HOUSEFORCE_STRAPI_API_TOKEN_SALT:-}
+      ADMIN_JWT_SECRET: ${HOUSEFORCE_STRAPI_ADMIN_JWT_SECRET:-}
+      TRANSFER_TOKEN_SALT: ${HOUSEFORCE_STRAPI_TRANSFER_TOKEN_SALT:-}
+      JWT_SECRET: ${HOUSEFORCE_STRAPI_JWT_SECRET:-}
+      
+      # DB Configuration (Production requires Managed DB via .env)
+      DATABASE_CLIENT: postgres
+      DATABASE_HOST: ${DATABASE_HOST:-localhost}
+      DATABASE_PORT: ${DATABASE_PORT:-25060}
+      DATABASE_NAME: ${DATABASE_NAME:-defaultdb}
+      DATABASE_USERNAME: ${DATABASE_USERNAME:-doadmin}
+      DATABASE_PASSWORD: ${DATABASE_PASSWORD:-}
+      DATABASE_SSL: ${DATABASE_SSL:-true}
+      
+      # Media Storage (Production requires DO Spaces via .env)
+      DO_SPACE_ACCESS_KEY: ${DO_SPACE_ACCESS_KEY:-}
+      DO_SPACE_SECRET_KEY: ${DO_SPACE_SECRET_KEY:-}
+      DO_SPACE_ENDPOINT: ${DO_SPACE_ENDPOINT:-}
+      DO_SPACE_BUCKET: ${DO_SPACE_BUCKET:-}
+      DO_SPACE_REGION: ${DO_SPACE_REGION:-us-east-1}
+      DO_SPACE_DIRECTORY: ${DO_SPACE_DIRECTORY:-uploads}
+
+      # Email Service Desk (Postmark)
+      POSTMARK_API_TOKEN: ${POSTMARK_API_TOKEN:-}
+      EMAIL_DOMAIN: ${EMAIL_DOMAIN:-replies.houseforce.es}
+      EMAIL_DEFAULT_FROM: ${EMAIL_DEFAULT_FROM:-updates@replies.houseforce.es}
+      PORTAL_URL: ${PORTAL_URL:-https://portal.${DOMAIN:-houseforce.es}}
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.houseforce-backend.rule=Host(`api.${DOMAIN:-houseforce.es}`)"
+      - "traefik.http.routers.houseforce-backend.entrypoints=websecure"
+      - "traefik.http.routers.houseforce-backend.tls.certresolver=le"
+      - "traefik.http.services.houseforce-backend.loadbalancer.server.port=1337"
+    networks:
+      - traefik-public
+      - houseforce-internal
+
+  houseforce-frontend:
+    image: ${FRONTEND_IMAGE:-ghcr.io/${GITHUB_OWNER:-Serathian}/houseforce-frontend:latest}
+    container_name: houseforce-frontend
+    restart: unless-stopped
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      NODE_ENV: production
+      STRAPI_INTERNAL_URL: http://houseforce-backend:1337
+      NEXT_PUBLIC_STRAPI_URL: https://api.${DOMAIN:-houseforce.es}
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.houseforce-frontend.rule=Host(`${DOMAIN:-houseforce.es}`) || Host(`www.${DOMAIN:-houseforce.es}`)"
+      - "traefik.http.routers.houseforce-frontend.entrypoints=websecure"
+      - "traefik.http.routers.houseforce-frontend.tls.certresolver=le"
+      - "traefik.http.services.houseforce-frontend.loadbalancer.server.port=3000"
+    networks:
+      - traefik-public
+      - houseforce-internal
+
+  houseforce-portal:
+    image: ${PORTAL_IMAGE:-ghcr.io/${GITHUB_OWNER:-Serathian}/houseforce-portal:latest}
+    container_name: houseforce-portal
+    restart: unless-stopped
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      NODE_ENV: production
+      NEXTAUTH_URL: https://portal.${DOMAIN:-houseforce.es}
+      STRAPI_INTERNAL_URL: http://houseforce-backend:1337
+      NEXT_PUBLIC_STRAPI_URL: https://api.${DOMAIN:-houseforce.es}
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:-}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.houseforce-portal.rule=Host(`portal.${DOMAIN:-houseforce.es}`)"
+      - "traefik.http.routers.houseforce-portal.entrypoints=websecure"
+      - "traefik.http.routers.houseforce-portal.tls.certresolver=le"
+      - "traefik.http.services.houseforce-portal.loadbalancer.server.port=3000"
+    networks:
+      - traefik-public
+      - houseforce-internal
+
+networks:
+  traefik-public:
+    external: false
+  houseforce-internal:
+    external: false

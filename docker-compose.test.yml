@@ -1,0 +1,72 @@
+services:
+  houseforce-minio:
+    image: minio/minio:latest
+    container_name: houseforce-test-minio
+    restart: unless-stopped
+    command: server /data
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadminpassword
+    volumes:
+      - houseforce-cms-uploads:/data
+    networks:
+      - houseforce-internal
+
+  houseforce-minio-create-bucket:
+    image: minio/mc
+    depends_on:
+      - houseforce-minio
+    networks:
+      - houseforce-internal
+    entrypoint: >
+      /bin/sh -c "
+      /usr/bin/mc alias set myminio http://houseforce-minio:9000 minioadmin minioadminpassword;
+      /usr/bin/mc mb myminio/uploads || true;
+      /usr/bin/mc anonymous set public myminio/uploads;
+      exit 0;
+      "
+
+  houseforce-db:
+    image: postgres:16-alpine
+    container_name: houseforce-db
+    restart: unless-stopped
+    command: postgres -c shared_buffers=64MB -c work_mem=8MB -c max_connections=40 -c maintenance_work_mem=32MB
+    environment:
+      POSTGRES_DB: ${DATABASE_NAME:-strapi}
+      POSTGRES_USER: ${DATABASE_USERNAME:-strapi}
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD:-password}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DATABASE_USERNAME:-strapi} -d ${DATABASE_NAME:-strapi}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - houseforce-db-data:/var/lib/postgresql/data
+    networks:
+      - houseforce-internal
+
+  houseforce-backend:
+    environment:
+      # Override production DB variables to point to the local test container
+      DATABASE_HOST: houseforce-db
+      DATABASE_PORT: 5432
+      DATABASE_NAME: ${DATABASE_NAME:-strapi}
+      DATABASE_USERNAME: ${DATABASE_USERNAME:-strapi}
+      DATABASE_PASSWORD: ${DATABASE_PASSWORD:-password}
+      DATABASE_SSL: "false"
+      # Point DO Spaces variables to local MinIO
+      DO_SPACE_ACCESS_KEY: "minioadmin"
+      DO_SPACE_SECRET_KEY: "minioadminpassword"
+      DO_SPACE_ENDPOINT: "http://houseforce-minio:9000"
+      DO_SPACE_BUCKET: "uploads"
+      DO_SPACE_REGION: "us-east-1"
+      SEED_TEST_DATA: ${SEED_TEST_DATA:-true}
+    depends_on:
+      houseforce-db:
+        condition: service_healthy
+      houseforce-minio-create-bucket:
+        condition: service_completed_successfully
+
+volumes:
+  houseforce-db-data:
+  houseforce-cms-uploads:
