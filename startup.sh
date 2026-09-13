@@ -27,10 +27,10 @@ fi
 if ! id "$DEPLOY_USER" &>/dev/null; then useradd -m -s /bin/bash "$DEPLOY_USER"; fi
 usermod -aG docker "$DEPLOY_USER"
 
-if [ -d /root/houseforce-infra ] && [ "/root/houseforce-infra" != "$REPO_DIR" ]; then
+CURRENT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [ "$CURRENT_DIR" != "$REPO_DIR" ]; then
   mkdir -p "$REPO_DIR"
-  cp -a /root/houseforce-infra/. "$REPO_DIR/"
-  rm -rf /root/houseforce-infra
+  cp -a "$CURRENT_DIR/." "$REPO_DIR/"
 fi
 chown -R "${DEPLOY_USER}:${DEPLOY_USER}" "$REPO_DIR"
 
@@ -38,10 +38,12 @@ DEPLOY_SSH="/home/${DEPLOY_USER}/.ssh"
 mkdir -p "$DEPLOY_SSH"
 if [ -f /root/.ssh/authorized_keys ]; then
   cp /root/.ssh/authorized_keys "$DEPLOY_SSH/authorized_keys"
-  chown -R "${DEPLOY_USER}:${DEPLOY_USER}" "$DEPLOY_SSH"
-  chmod 700 "$DEPLOY_SSH"
-  chmod 600 "$DEPLOY_SSH/authorized_keys"
+elif [ -n "$SUDO_USER" ] && [ -f "/home/${SUDO_USER}/.ssh/authorized_keys" ]; then
+  cp "/home/${SUDO_USER}/.ssh/authorized_keys" "$DEPLOY_SSH/authorized_keys"
 fi
+chown -R "${DEPLOY_USER}:${DEPLOY_USER}" "$DEPLOY_SSH"
+chmod 700 "$DEPLOY_SSH"
+chmod 600 "$DEPLOY_SSH/authorized_keys" 2>/dev/null || true
 
 if [ ! -f "${REPO_DIR}/.env" ]; then
   echo "=== Production Environment Setup ==="
