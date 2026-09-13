@@ -1,6 +1,6 @@
 services:
   houseforce-minio:
-    image: minio/minio:latest
+    image: quay.io/minio/minio:latest
     container_name: houseforce-test-minio
     restart: unless-stopped
     command: server /data
@@ -13,7 +13,7 @@ services:
       - houseforce-internal
 
   houseforce-minio-create-bucket:
-    image: minio/mc
+    image: quay.io/minio/mc:latest
     depends_on:
       - houseforce-minio
     networks:
