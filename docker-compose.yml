@@ -97,7 +97,6 @@ services:
       PORTAL_URL: ${PORTAL_URL:-https://portal.${DOMAIN:-houseforce.es}}
     labels:
       - "traefik.enable=true"
-      - "traefik.docker.network=traefik-public"
       - "traefik.http.routers.houseforce-backend.rule=Host(`api.${DOMAIN:-houseforce.es}`)"
       - "traefik.http.routers.houseforce-backend.entrypoints=websecure"
       - "traefik.http.routers.houseforce-backend.tls.certresolver=le"
@@ -119,7 +118,6 @@ services:
       NEXT_PUBLIC_STRAPI_URL: https://api.${DOMAIN:-houseforce.es}
     labels:
       - "traefik.enable=true"
-      - "traefik.docker.network=traefik-public"
       - "traefik.http.routers.houseforce-frontend.rule=Host(`${DOMAIN:-houseforce.es}`) || Host(`www.${DOMAIN:-houseforce.es}`)"
       - "traefik.http.routers.houseforce-frontend.entrypoints=websecure"
       - "traefik.http.routers.houseforce-frontend.tls.certresolver=le"
@@ -145,7 +143,6 @@ services:
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
     labels:
       - "traefik.enable=true"
-      - "traefik.docker.network=traefik-public"
       - "traefik.http.routers.houseforce-portal.rule=Host(`portal.${DOMAIN:-houseforce.es}`)"
       - "traefik.http.routers.houseforce-portal.entrypoints=websecure"
       - "traefik.http.routers.houseforce-portal.tls.certresolver=le"
@@ -156,6 +153,6 @@ services:
 
 networks:
   traefik-public:
-    name: traefik-public
+    external: false
   houseforce-internal:
-    name: houseforce-internal
+    external: false
