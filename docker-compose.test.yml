@@ -10,14 +10,14 @@ services:
     volumes:
       - houseforce-cms-uploads:/data
     networks:
-      - houseforce-internal
+      - houseforce-network
 
   houseforce-minio-create-bucket:
     image: quay.io/minio/mc:latest
     depends_on:
       - houseforce-minio
     networks:
-      - houseforce-internal
+      - houseforce-network
     entrypoint: >
       /bin/sh -c "
       /usr/bin/mc alias set myminio http://houseforce-minio:9000 minioadmin minioadminpassword;
@@ -43,7 +43,7 @@ services:
     volumes:
       - houseforce-db-data:/var/lib/postgresql/data
     networks:
-      - houseforce-internal
+      - houseforce-network
 
   houseforce-backend:
     environment:
@@ -70,3 +70,6 @@ services:
 volumes:
   houseforce-db-data:
   houseforce-cms-uploads:
+
+networks:
+  houseforce-network:

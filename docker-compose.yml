@@ -6,7 +6,6 @@ services:
     command:
       - "--providers.docker=true"
       - "--providers.docker.exposedbydefault=false"
-      - "--providers.docker.network=traefik-public"
       - "--entrypoints.web.address=:80"
       - "--entrypoints.websecure.address=:443"
       - "--entrypoints.web.http.redirections.entrypoint.to=websecure"
@@ -31,7 +30,7 @@ services:
       - "/var/run/docker.sock:/var/run/docker.sock:ro"
       - "./traefik/acme.json:/acme.json"
     networks:
-      - traefik-public
+      - houseforce-network
 
   watchtower:
     image: nickfedor/watchtower:latest
@@ -53,7 +52,7 @@ services:
       - "traefik.http.routers.watchtower.tls.certresolver=le"
       - "traefik.http.services.watchtower.loadbalancer.server.port=8080"
     networks:
-      - traefik-public
+      - houseforce-network
 
   houseforce-backend:
     image: ${BACKEND_IMAGE:-ghcr.io/${GITHUB_OWNER:-Serathian}/houseforce-backend:latest}
@@ -102,8 +101,7 @@ services:
       - "traefik.http.routers.houseforce-backend.tls.certresolver=le"
       - "traefik.http.services.houseforce-backend.loadbalancer.server.port=1337"
     networks:
-      - traefik-public
-      - houseforce-internal
+      - houseforce-network
 
   houseforce-frontend:
     image: ${FRONTEND_IMAGE:-ghcr.io/${GITHUB_OWNER:-Serathian}/houseforce-frontend:latest}
@@ -123,8 +121,7 @@ services:
       - "traefik.http.routers.houseforce-frontend.tls.certresolver=le"
       - "traefik.http.services.houseforce-frontend.loadbalancer.server.port=3000"
     networks:
-      - traefik-public
-      - houseforce-internal
+      - houseforce-network
 
   houseforce-portal:
     image: ${PORTAL_IMAGE:-ghcr.io/${GITHUB_OWNER:-Serathian}/houseforce-portal:latest}
@@ -148,11 +145,7 @@ services:
       - "traefik.http.routers.houseforce-portal.tls.certresolver=le"
       - "traefik.http.services.houseforce-portal.loadbalancer.server.port=3000"
     networks:
-      - traefik-public
-      - houseforce-internal
+      - houseforce-network
 
 networks:
-  traefik-public:
-    external: false
-  houseforce-internal:
-    external: false
+  houseforce-network:
